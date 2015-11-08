@@ -3,14 +3,22 @@
 
 require 'readline'
 require 'yaml'
+require 'optparse'
+
+$opt = Hash.new
+OptionParser.new do |x|
+  x.on("--state-file=FILE", String, "State file") do |f|
+    $opt[:state] = YAML.load(File.open(f, "r").read)
+  end
+end.parse!
 
 module InteractiveHeapSort
   @@prompt = "## 一番好きなのを選びなさい (%d回目)"
   @@readline_prompt = "> <!-- --> "
 
-  class Exitting < RuntimeError
+  class Quit < RuntimeError
     def to_s
-      "Abort requested"
+      "Aborted"
     end
   end
 
@@ -18,10 +26,16 @@ module InteractiveHeapSort
   def question(selections)
     return nil if selections.length == 0
     return selections[0] if selections.length == 1
-
-    @qt ||= 0
-    @qt += 1
     ss = selections.sort
+
+    @q_cnt ||= 0
+    @q_cnt += 1    
+    if @heap_sort_state &&
+       @heap_sort_state.key?("answers") &&
+       @q_cnt <= @heap_sort_state["answers"].size
+      a = @heap_sort_state["answers"][@q_cnt - 1]
+      return a if ss.find_index(a)
+    end
     cnt = 0
     messages = ss.map do |i|
       next nil unless i < length
@@ -30,7 +44,7 @@ module InteractiveHeapSort
     end
     messages.compact!
     puts
-    puts @@prompt % @qt
+    puts @@prompt % @q_cnt
     puts
     messages.each do |m|
       puts " %s" % m
@@ -42,11 +56,16 @@ module InteractiveHeapSort
     puts
     loop do
       buf = Readline.readline(@@readline_prompt, true)
-      raise Exitting if buf =~ /^quit.*$/
+      raise Quit if buf =~ /^quit.*$/
       buf.sub!(/^\s*(\d*)\D.*$/, "\\1")
       nbuf = buf.to_i - 1
       if nbuf >= 0 && nbuf < ss.size
-        break ss[nbuf]
+        ans = ss[nbuf]
+        if @heap_sort_state
+          @heap_sort_state["answers"] ||= Array.new
+          @heap_sort_state["answers"] << ans
+        end
+        break ans
       end
     end
   end
@@ -104,31 +123,65 @@ module InteractiveHeapSort
   def heap_sort!(heap_factor = nil)
     heap_factor ||= (Math.log(length) / Math.log(2)).to_i - 1
 
+    if @heap_sort_state && @heap_sort_state.is_a?(Hash)
+      @heap_sort_state["init"] = self.dup
+    end
     raise TypeError, "Factor must be an integer" unless
       heap_factor.is_a?(Integer)
 
     heap_factor = 2 if heap_factor < 2
 
-    @qt = nil
+    @q_cnt = nil
     heap_leaf(heap_factor)
     heap_down(heap_factor, length - 1)
   end
-end
 
-file = DATA
-if not ARGV.empty?
-  fn = ARGV[0]
-  if fn != "-"
-    file = File.open(ARGV[0], "r")
-  else
-    file = $stdin
+  def heap_sort_state=(stat)
+    @heap_sort_state = stat
+  end
+
+  def heap_sort_state
+    @heap_sort_state
   end
 end
-@ary = file.read.split(/\s+/).uniq
 
-@ary.shuffle!
+if $opt.key?(:state)
+  @ary = $opt[:state]["init"]
+else
+  file = DATA
+  if not ARGV.empty?
+    fn = ARGV[0]
+    if fn != "-"
+      file = File.open(ARGV[0], "r")
+    else
+      file = $stdin
+    end
+  end
+  @ary = file.read.split(/\s+/).uniq
+
+  @ary.shuffle!
+  $opt[:state] = Hash.new
+end
+
 @ary.extend InteractiveHeapSort
-@ary.heap_sort!
+begin
+  @ary.heap_sort_state = $opt[:state]
+  @ary.heap_sort!
+rescue InteractiveHeapSort::Quit
+  Readline.completion_proc = proc do |m|
+    %w[yes no].select { |x| x.match(m) }
+  end
+  ret = Readline.readline("Save state? (yes/no)> ", false)
+  if ret =~ /^\s*y/i
+    Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
+    fn = Readline.readline("Enter filename> ", false)
+    fn.sub!(/\s*$/, "")
+    File.open(fn, "w") do |fp|
+      fp.print $opt[:state].to_yaml
+    end
+  end
+  exit 0
+end
 @ary.reverse!
 
 as = (Math.log(@ary.length - 1) / Math.log(10)).to_i + 1
