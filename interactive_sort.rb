@@ -5,7 +5,7 @@ require 'readline'
 require 'yaml'
 
 module InteractiveHeapSort
-  @@prompt = "## What is the best in the followings?"
+  @@prompt = "## 一番好きなのを選びなさい"
   @@readline_prompt = "> "
 
   class Exitting < RuntimeError
@@ -124,12 +124,12 @@ end
 
 @ary.shuffle!
 @ary.extend InteractiveHeapSort
-@ary.heap_sort!(8)
+@ary.heap_sort!
 @ary.reverse!
 
 as = (Math.log(@ary.length - 1) / Math.log(10)).to_i + 1
 puts
-puts "## Result"
+puts "## 結果"
 puts
 @ary.each_with_index do |x, i|
   puts "%*d. %s" % [as, i + 1, x]
