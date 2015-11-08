@@ -5,8 +5,8 @@ require 'readline'
 require 'yaml'
 
 module InteractiveHeapSort
-  @@prompt = "## 一番好きなのを選びなさい"
-  @@readline_prompt = "> "
+  @@prompt = "## 一番好きなのを選びなさい (%d回目)"
+  @@readline_prompt = "> <!-- --> "
 
   class Exitting < RuntimeError
     def to_s
@@ -18,6 +18,9 @@ module InteractiveHeapSort
   def question(selections)
     return nil if selections.length == 0
     return selections[0] if selections.length == 1
+
+    @qt ||= 0
+    @qt += 1
     ss = selections.sort
     cnt = 0
     messages = ss.map do |i|
@@ -27,7 +30,7 @@ module InteractiveHeapSort
     end
     messages.compact!
     puts
-    puts @@prompt
+    puts @@prompt % @qt
     puts
     messages.each do |m|
       puts " %s" % m
@@ -106,6 +109,7 @@ module InteractiveHeapSort
 
     heap_factor = 2 if heap_factor < 2
 
+    @qt = nil
     heap_leaf(heap_factor)
     heap_down(heap_factor, length - 1)
   end
