@@ -4,17 +4,6 @@
 require 'readline'
 require 'yaml'
 
-file = DATA
-if not ARGV.empty?
-  fn = ARGV[0]
-  if fn != "-"
-    file = File.open(ARGV[0], "r")
-  else
-    file = $stdin
-  end
-end
-@ary = file.read.split(/\s+/).uniq
-
 module InteractiveHeapSort
   @@prompt = "## What is the best in the followings?"
   @@readline_prompt = "> "
@@ -37,10 +26,11 @@ module InteractiveHeapSort
       "%d. %s" % [cnt, self[i]]
     end
     messages.compact!
+    puts
     puts @@prompt
     puts
     messages.each do |m|
-      puts "    %s" % m
+      puts " %s" % m
     end
     messages << "quit"
     Readline.completion_proc = Proc.new do |a|
@@ -121,12 +111,23 @@ module InteractiveHeapSort
   end
 end
 
+file = DATA
+if not ARGV.empty?
+  fn = ARGV[0]
+  if fn != "-"
+    file = File.open(ARGV[0], "r")
+  else
+    file = $stdin
+  end
+end
+@ary = file.read.split(/\s+/).uniq
+
 @ary.shuffle!
 @ary.extend InteractiveHeapSort
 @ary.heap_sort!(8)
 @ary.reverse!
 
-as = 4
+as = (Math.log(@ary.length - 1) / Math.log(10)).to_i + 1
 puts
 puts "## Result"
 puts
