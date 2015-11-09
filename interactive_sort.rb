@@ -149,6 +149,9 @@ end
 
 if $opt.key?(:state)
   @ary = $opt[:state]["init"]
+  if $opt[:state]["max_sel"]
+    $opt[:max_sel] = $opt[:state]["max_sel"]
+  end
 else
   file = DATA
   if not ARGV.empty?
@@ -163,6 +166,9 @@ else
 
   @ary.shuffle!
   $opt[:state] = Hash.new
+  if $opt[:max_sel]
+    $opt[:state]["max_sel"] = $opt[:max_sel]
+  end
 end
 
 @ary.extend InteractiveHeapSort
