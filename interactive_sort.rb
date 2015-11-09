@@ -10,6 +10,10 @@ OptionParser.new do |x|
   x.on("--state-file=FILE", String, "State file") do |f|
     $opt[:state] = YAML.load(File.open(f, "r").read)
   end
+
+  x.on("--max-selections=NUMBER", Integer, "Maximum number of choices to ask you") do |m|
+    $opt[:max_sel] = m - 1
+  end
 end.parse!
 
 module InteractiveHeapSort
@@ -23,11 +27,20 @@ module InteractiveHeapSort
   end
 
   private
-  def question(selections)
-    return nil if selections.length == 0
-    return selections[0] if selections.length == 1
-    ss = selections.sort
+  # m: heap factor
+  # children: n * m + 1 to (n + 1) * m
+  # parent:   (n - 1) / m
+  def question(factor, parent, l = length)
+    raise ArgumentError unless (0..l).cover?(parent)
 
+    fst = parent * factor + 1
+    lst = fst + factor
+    return nil if fst >= l
+    lst = l if lst > l
+
+    children = (fst...lst).to_a
+    ss = [parent] + children
+  
     @q_cnt ||= 0
     @q_cnt += 1    
     if @heap_sort_state &&
@@ -76,46 +89,35 @@ module InteractiveHeapSort
     self[j] = t
   end
 
-  # m: heap factor
-  # children: n * m + 1 to (n + 1) * m
-  # parent:   (n - 1) / m
   def heap_leaf(m)
     s = length
     loop do
       pp = (s - 1) / m
-      fst = pp * m + 1
-      lst = fst + m
-      pc = (fst...lst).to_a
-      pc << pp
-      a = question pc
+      a = question(m, pp)
+      break unless a
       if a != pp
         swap(a, pp)
+        heap_up(m, a)
       end
       break if pp == 0
       s = pp * m
     end
   end
 
-  def heap_up(m, l)
-    pp = 0
+  def heap_up(m, pp, l = length - 1)
     loop do
-      fst = pp * m + 1
-      lst = fst + m
-      lst = l if lst >= l
-      pc = (fst...lst).to_a
-      pc << pp
-      a = question pc
+      a = question(m, pp, l)
+      break unless a
       break if a == pp
       swap(a, pp)
       pp = a
     end
   end
 
-  def heap_down(m, l)
-    return if l <= 0
-    l.downto(0) do |i|
+  def heap_down(m)
+    (length - 1).downto(1) do |i|
       swap(0, i)
-      heap_up(m, i)
+      heap_up(m, 0, i)
     end
   end
 
@@ -133,7 +135,7 @@ module InteractiveHeapSort
 
     @q_cnt = nil
     heap_leaf(heap_factor)
-    heap_down(heap_factor, length - 1)
+    heap_down(heap_factor)
   end
 
   def heap_sort_state=(stat)
@@ -166,7 +168,7 @@ end
 @ary.extend InteractiveHeapSort
 begin
   @ary.heap_sort_state = $opt[:state]
-  @ary.heap_sort!
+  @ary.heap_sort!($opt[:max_sel])
 rescue InteractiveHeapSort::Quit
   Readline.completion_proc = proc do |m|
     %w[yes no].select { |x| x.match(m) }
