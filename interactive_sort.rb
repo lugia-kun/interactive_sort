@@ -104,7 +104,7 @@ module InteractiveHeapSort
     end
   end
 
-  def heap_up(m, pp, l = length - 1)
+  def heap_up(m, pp, l = length)
     loop do
       a = question(m, pp, l)
       break unless a
