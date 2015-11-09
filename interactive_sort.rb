@@ -6,6 +6,8 @@ require 'yaml'
 require 'optparse'
 
 $opt = Hash.new
+$opt[:shuffle] = true
+
 OptionParser.new do |x|
   x.on("--state-file=FILE", String, "State file") do |f|
     $opt[:state] = YAML.load(File.open(f, "r").read)
@@ -13,6 +15,10 @@ OptionParser.new do |x|
 
   x.on("--max-selections=NUMBER", Integer, "Maximum number of choices to ask you") do |m|
     $opt[:max_sel] = m - 1
+  end
+
+  x.on("--[no-]shuffle", "(Don\'t) shuffle the list before sorting") do |x|
+    $opt[:shuffle] = x
   end
 end.parse!
 
@@ -48,6 +54,10 @@ module InteractiveHeapSort
        @q_cnt <= @heap_sort_state["answers"].size
       a = @heap_sort_state["answers"][@q_cnt - 1]
       return a if ss.find_index(a)
+      ret = @heap_sort_state["answers"].slice!(@q_cnt..-1)
+      if ret && !ret.empty?
+        $stderr.puts "NOTE: Saved answers after Q.#{@q_cnt} were removed."
+      end
     end
     cnt = 0
     messages = ss.map do |i|
@@ -69,6 +79,7 @@ module InteractiveHeapSort
     puts
     loop do
       buf = Readline.readline(@@readline_prompt, true)
+      raise Quit unless buf
       raise Quit if buf =~ /^quit.*$/
       buf.sub!(/^\s*(\d*)\D.*$/, "\\1")
       nbuf = buf.to_i - 1
@@ -91,16 +102,15 @@ module InteractiveHeapSort
 
   def heap_leaf(m)
     s = length
+    pp = (s - 1) / m
     loop do
-      pp = (s - 1) / m
       a = question(m, pp)
-      break unless a
-      if a != pp
+      if a && a != pp
         swap(a, pp)
         heap_up(m, a)
       end
       break if pp == 0
-      s = pp * m
+      pp -= 1
     end
   end
 
@@ -164,7 +174,7 @@ else
   end
   @ary = file.read.split(/\s+/).uniq
 
-  @ary.shuffle!
+  @ary.shuffle! if $opt[:shuffle]
   $opt[:state] = Hash.new
   if $opt[:max_sel]
     $opt[:state]["max_sel"] = $opt[:max_sel]
@@ -183,6 +193,7 @@ rescue InteractiveHeapSort::Quit
   if ret =~ /^\s*y/i
     Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
     fn = Readline.readline("Enter filename> ", false)
+    exit 1 unless fn
     fn.sub!(/\s*$/, "")
     File.open(fn, "w") do |fp|
       fp.print $opt[:state].to_yaml
