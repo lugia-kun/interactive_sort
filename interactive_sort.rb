@@ -33,6 +33,58 @@ module InteractiveHeapSort
   end
 
   private
+  def draw_tree(factor, root, last, a = [])
+    raise ArgumentError if root < 0
+    raise ArgumentError if factor < 2
+    raise ArgumentError if last < 0
+    return if root >= last
+    return if root >= length
+    last = length if last > length
+    fst = root * factor + 1
+    lst = fst + factor - 1
+    return if fst >= last
+    lst = last - 2 if lst >= last - 1
+    t = " ├"
+    e = " └"
+    puts self[root] if a.empty?
+    (fst...lst).each do |i|
+      puts "#{a.join}#{t} #{self[i]}"
+      draw_tree(factor, i, last, a + [" │"])
+    end
+    puts "#{a.join}#{e} #{self[lst]}"
+    draw_tree(factor, lst, last, a + ["  "])
+  end
+
+  def draw_dot(factor, root, last, depth = 0)
+    raise ArgumentError if root < 0
+    raise ArgumentError if factor < 2
+    raise ArgumentError if last < 0
+    return if root >= last
+    return if root >= length
+    last = length if last > length
+    fst = root * factor + 1
+    lst = fst + factor - 1
+    return if fst >= last
+    lst = last - 2 if lst >= last - 1
+
+    if depth == 0
+      puts "graph G {"
+      puts "   n#{root} [label=\"#{self[root]}\"]"
+    end
+    (fst..lst).each do |i|
+      puts "   n#{i} [label=\"#{self[i]}\"]"
+    end
+    (fst..lst).each do |i|
+      puts "   n#{root} -- n#{i}"
+    end
+    (fst..lst).each do |i|
+      draw_dot(factor, i, last, depth + 1)
+    end
+    if depth == 0
+      puts "}"
+    end
+  end
+
   # m: heap factor
   # children: n * m + 1 to (n + 1) * m
   # parent:   (n - 1) / m
@@ -73,6 +125,9 @@ module InteractiveHeapSort
       puts " %s" % m
     end
     messages << "quit"
+    messages << "firmed"
+    messages << "draw-tree"
+    messages << "draw-dot"
     Readline.completion_proc = Proc.new do |a|
       messages.select { |m| m.match(a.to_s) }
     end
@@ -80,7 +135,56 @@ module InteractiveHeapSort
     loop do
       buf = Readline.readline(@@readline_prompt, true)
       raise Quit unless buf
-      raise Quit if buf =~ /^quit.*$/
+      raise Quit if buf =~ /^\s*quit.*$/
+      if buf =~ /^\s*firmed.*$/
+        if l == length
+          puts "## まだ何も確定していませんよ"
+          next
+        end
+        puts
+        puts "## 確定済みリスト"
+        puts
+        (length - 1).downto(l) do |i|
+          puts " %d. %s" % [length - i, self[i]]
+        end
+        next
+      end
+      if buf =~ /^\s*draw-tree\s+(\d+)\.?\s+(\d).*$/
+        n = $1.to_i - 1
+        d = $2.to_i - 1
+        ll = length
+        if 0 <= d
+          ll = 0.upto(d).inject(0) do |i, j|
+            i + factor ** j
+          end
+        end
+        if ll > length
+          ll = length
+        end
+        if 0 <= n && n < ss.size
+          draw_tree(factor, ss[n], ll)
+        else
+          draw_tree(factor, 0, ll)
+        end
+        next
+      end
+      if buf =~ /^\s*draw-tree\s+(\d+).*$/
+        n = $1.to_i - 1
+        if 0 <= n && n < ss.size
+          draw_tree(factor, ss[n], l)
+        else
+          draw_tree(factor, 0, l)
+        end
+        next
+      end
+      if buf =~ /^\s*draw-tree.*$/
+        draw_tree(factor, 0, l)
+        next
+      end
+      if buf =~ /^\s*draw-dot.*$/
+        draw_dot(factor, 0, l)
+        next
+      end
       buf.sub!(/^\s*(\d*)\D.*$/, "\\1")
       nbuf = buf.to_i - 1
       if nbuf >= 0 && nbuf < ss.size
@@ -95,9 +199,7 @@ module InteractiveHeapSort
   end
 
   def swap(i, j)
-    t = self[i]
-    self[i] = self[j]
-    self[j] = t
+    self[i], self[j] = self[j], self[i]
   end
 
   def heap_leaf(m)
