@@ -32,7 +32,41 @@ module InteractiveHeapSort
     end
   end
 
+  def yesno(prompt)
+    Readline.completion_proc = proc do |m|
+      %w[yes no].select { |x| x.match(m) }
+    end
+    loop do
+      ret = Readline.readline("#{prompt} (yes/no)> ", false)
+      break false if ret =~ /^\s*no.*$/
+      break true if ret =~ /^\s*yes.*$/
+      puts "Please answer 'yes' or 'no'."
+    end
+  end
+
   private
+  def parse_command(string, name, arguments, &block)
+    spa = string.split(/\s+/)
+    spa.delete("")
+    return false if spa[0] != name
+    spa.delete_at 0
+    h = Hash.new
+    opt = OptionParser.new do |x|
+      arguments.each do |n|
+        x.on("#{n}[=VAR]") do |v|
+          h[n] = v
+        end
+      end
+    end
+    begin
+      opt.parse!(spa)
+    rescue OptionParser::ParseError => e
+      puts "Error: " + e.to_s
+      return true
+    end
+    block.call(spa, h)
+  end
+
   def draw_tree(factor, root, last, a = [])
     raise ArgumentError if root < 0
     raise ArgumentError if factor < 2
@@ -55,7 +89,7 @@ module InteractiveHeapSort
     draw_tree(factor, lst, last, a + ["  "])
   end
 
-  def draw_dot(factor, root, last, depth = 0)
+  def draw_dot(stream, factor, root, last, depth = 0)
     raise ArgumentError if root < 0
     raise ArgumentError if factor < 2
     raise ArgumentError if last < 0
@@ -68,20 +102,21 @@ module InteractiveHeapSort
     lst = last - 2 if lst >= last - 1
 
     if depth == 0
-      puts "graph G {"
-      puts "   n#{root} [label=\"#{self[root]}\"]"
+      stream.puts "graph G {"
+      stream.puts "   n#{root} [label=\"#{self[root]}\"]"
     end
     (fst..lst).each do |i|
-      puts "   n#{i} [label=\"#{self[i]}\"]"
+      stream.puts "   n#{i} [label=\"#{self[i]}\"]"
     end
     (fst..lst).each do |i|
-      puts "   n#{root} -- n#{i}"
+      stream.puts "   n#{root} -- n#{i}"
     end
     (fst..lst).each do |i|
-      draw_dot(factor, i, last, depth + 1)
+      draw_dot(stream, factor, i, last, depth + 1)
     end
     if depth == 0
-      puts "}"
+      stream.puts "}"
+      puts "Done!"
     end
   end
 
@@ -135,55 +170,86 @@ module InteractiveHeapSort
     loop do
       buf = Readline.readline(@@readline_prompt, true)
       raise Quit unless buf
-      raise Quit if buf =~ /^\s*quit.*$/
-      if buf =~ /^\s*firmed.*$/
+      raise Quit if parse_command(buf, "quit", []) { 1 }
+      next if parse_command(buf, "firmed", []) do
         if l == length
           puts "## まだ何も確定していませんよ"
-          next
+        else
+          puts
+          puts "## 確定済みリスト"
+          puts
+          (length - 1).downto(l) do |i|
+            puts " %d. %s" % [length - i, self[i]]
+          end
         end
-        puts
-        puts "## 確定済みリスト"
-        puts
-        (length - 1).downto(l) do |i|
-          puts " %d. %s" % [length - i, self[i]]
-        end
-        next
+        true
       end
-      if buf =~ /^\s*draw-tree\s+(\d+)\.?\s+(\d).*$/
-        n = $1.to_i - 1
-        d = $2.to_i - 1
-        ll = length
+      next if parse_command(buf, "dump-array", []) do
+        self.each_with_index do |x, i|
+          puts "%d. %s" % [i, x]
+        end
+        true
+      end
+      next if parse_command(buf, "draw-tree", ["-r", "-f"]) do |m, h|
+        n = -1
+        if h.key?(:f)
+          n = h[:f].to_i - 1
+        end
+        d = -1
+        if h.key?(:d)
+          n = h[:d].to_i - 1
+        end
+        ll = l
         if 0 <= d
           ll = 0.upto(d).inject(0) do |i, j|
             i + factor ** j
           end
         end
-        if ll > length
-          ll = length
+        if ll > l
+          ll = l
         end
         if 0 <= n && n < ss.size
           draw_tree(factor, ss[n], ll)
         else
           draw_tree(factor, 0, ll)
         end
-        next
+        true
       end
-      if buf =~ /^\s*draw-tree\s+(\d+).*$/
-        n = $1.to_i - 1
-        if 0 <= n && n < ss.size
-          draw_tree(factor, ss[n], l)
-        else
-          draw_tree(factor, 0, l)
+      next if parse_command(buf, "draw-dot", ["-r", "-f"]) do |fa, h|
+        begin
+          out = $stdout
+          if ! fa.empty?
+            if File.exists?(fa[0])
+              break true unless yesno("Overwrite \"#{fa[0]}\"?")
+            end
+            out = File.open(fa[0], "w")
+          end
+          n = -1
+          if h.key?(:f)
+            n = h[:f].to_i - 1
+          end
+          d = -1
+          if h.key?(:d)
+            n = h[:d].to_i - 1
+          end
+          ll = l
+          if 0 <= d
+            ll = 0.upto(d).inject(0) do |i, j|
+              i + factor ** j
+            end
+          end
+          if ll > l
+            ll = l
+          end
+          if 0 <= n && n < ss.size
+            draw_dot(out, factor, ss[n], ll)
+          else
+            draw_dot(out, factor, 0, ll)
+          end          
+        rescue SystemCallError => e
+          puts "Error: #{e.to_s}"
         end
-        next
-      end
-      if buf =~ /^\s*draw-tree.*$/
-        draw_tree(factor, 0, l)
-        next
-      end
-      if buf =~ /^\s*draw-dot.*$/
-        draw_dot(factor, 0, l)
-        next
+        true
       end
       buf.sub!(/^\s*(\d*)\D.*$/, "\\1")
       nbuf = buf.to_i - 1
@@ -288,17 +354,24 @@ begin
   @ary.heap_sort_state = $opt[:state]
   @ary.heap_sort!($opt[:max_sel])
 rescue InteractiveHeapSort::Quit
-  Readline.completion_proc = proc do |m|
+  yn = proc do |m|
     %w[yes no].select { |x| x.match(m) }
   end
+  Readline.completion_proc = yn
   ret = Readline.readline("Save state? (yes/no)> ", false)
   if ret =~ /^\s*y/i
-    Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
-    fn = Readline.readline("Enter filename> ", false)
-    exit 1 unless fn
-    fn.sub!(/\s*$/, "")
-    File.open(fn, "w") do |fp|
-      fp.print $opt[:state].to_yaml
+    loop do
+      Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
+      fn = Readline.readline("Enter filename> ", false)
+      exit 1 unless fn
+      fn.sub!(/\s*$/, "")
+      if File.exists?(fn)
+        next unless @ary.yesno("Overwrite \"#{fn}\"?")
+      end
+      File.open(fn, "w") do |fp|
+        fp.print $opt[:state].to_yaml
+      end
+      break
     end
   end
   exit 0
