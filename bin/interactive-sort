@@ -1,0 +1,7 @@
+#!/bin/ruby
+
+require 'bundler'
+
+Bundler.require
+
+InteractiveSort.start(ARGV)
