@@ -1,212 +1,228 @@
 # coding: utf-8
 
+if $0 == __FILE__
+  require 'bundler'
+  Bundler.setup
+end
+
 require 'readline'
+require 'thor'
 
-module Question
-  @@prompt = "## 一番好きなのを選びなさい (%d回目)"
-  @@readline_prompt = "> <!-- --> "
-  @@answer = nil
+module InteractiveSort
+  module Question
+    @@readline_prompt = "> <!-- --> "
 
-  class Quit < RuntimeError
-    def to_s
-      "Aborted"
-    end
-  end
-
-  def self.yesno(prompt)
-    Readline.completion_proc = proc do |m|
-      %w[yes no].select { |x| x.match(m) }
-    end
-    loop do
-      ret = Readline.readline("#{prompt} (yes/no)> ", false)
-      break false if ret =~ /^\s*no.*$/
-      break true if ret =~ /^\s*yes.*$/
-      puts "Please answer 'yes' or 'no'."
-    end
-  end
-
-  def parse_command(string, name, arguments, &block)
-    spa = string.split(/\s+/)
-    spa.delete("")
-    return false if spa[0] != name
-    spa.delete_at 0
-    h = Hash.new
-    opt = OptionParser.new do |x|
-      arguments.each do |n|
-        sym = n.sub(/^-*/, "").to_sym
-        x.on("#{n}[=VAR]") do |v|
-          h[sym] = v
-        end
+    class Quit < RuntimeError
+      def to_s
+        "Aborted"
       end
     end
-    begin
-      opt.parse!(spa)
-    rescue OptionParser::ParseError => e
-      puts "Error: " + e.to_s
-      return true
+
+    def self.ask_file_for_read(prompt)
+      Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
+      loop do
+        ret = Readline.readline("#{prompt}> ", false)
+        next if ret =~ /^\s*$/
+        ret.sub!(/^\s*(.*?)\s*$/, "\\1")
+        if ret =~ /^"(.*)"$/
+          ret = $1
+        end
+        if !File.exist?(ret)
+          $stderr.puts "#{File.basename($0)}: error: #{ret}: No such file or directory"
+          next
+        end
+        break ret
+      end
     end
-    block.call(spa, h)
-  end
 
-  def question(selections, commands)
-    
-  end
+    def self.ask_file_for_write(prompt, ask_overwrite = true)
+      loop do
+        Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
+        ret = Readline.readline("#{prompt}> ", false)
+        next if ret =~ /^\s*$/
+        ret.sub!(/^\s*(.*?)\s*$/, "\\1")
+        if ret =~ /^"(.*)"$/
+          ret = $1
+        end
+        if File.exist?(ret)
+          break ret if yesno?("Overwrite \"#{ret}\"?")
+          next
+        end
+        break ret
+      end
+    end
 
-  def question(factor, parent, l = length)
-    raise ArgumentError unless (0..l).cover?(parent)
+    def self.yesno?(prompt)
+      Readline.completion_proc = proc do |m|
+        %w[yes no].select { |x| x.match(m) }
+      end
+      loop do
+        ret = Readline.readline("#{prompt} (yes/no)> ", false)
+        break false if ret =~ /^\s*no.*$/
+        break true if ret =~ /^\s*yes.*$/
+        puts "Please answer 'yes' or 'no'."
+      end
+    end
 
-    fst = parent * factor + 1
-    lst = fst + factor
-    return nil if fst >= l
-    lst = l if lst > l
+    def self.ask(prompt, selections, hsh = {thor: nil, output: $stdout})
+      thor_class = hsh[:thor]
+      output = hsh[:output]
+      output ||= $stdout
+      @select = hsh[:select]
+      hide = hsh[:hide]
+      hide ||= false
 
-    children = (fst...lst).to_a
-    ss = [parent] + children
+      ss = selections.size
+      is_thor_class = thor_class.respond_to?(:commands) &&
+                      thor_class.commands.respond_to?(:each_pair) &&
+                      thor_class.respond_to?(:start)
 
-    @s_cnt ||= 0
-    @s_cnt += children.size
-    @q_cnt ||= 0
-    @q_cnt += 1    
-
-    if @@answer
-      r = -1
-      if @@answer == :random
-        r = ss.sample
+      if !is_thor_class
+        if ss == 0
+          fail "No selections and/or Thor class specified."
+        end
+        thor_class = Class.new(Thor)
       else
-        raise ArgumentError if @@answer < 1
-        raise ArgumentError if @@answer > ss.length
-        r = ss[@@answer - 1]
+        thor_class = Class.new(thor_class)
       end
-      return r
-    end    
 
-    if @heap_sort_state &&
-       @heap_sort_state.key?("answers") &&
-       @q_cnt <= @heap_sort_state["answers"].size
-      a = @heap_sort_state["answers"][@q_cnt - 1]
-      return a if ss.find_index(a)
-      ret = @heap_sort_state["answers"].slice!(@q_cnt..-1)
-      if ret && !ret.empty?
-        $stderr.puts "NOTE: Saved answers after Q.#{@q_cnt} were removed."
-      end
-    end
-    cnt = 0
-    messages = ss.map do |i|
-      next nil unless i < length
-      cnt += 1
-      "%d. %s" % [cnt, self[i]]
-    end
-    messages.compact!
-    puts
-    puts @@prompt % @q_cnt
-    puts
-    messages.each do |m|
-      puts " %s" % m
-    end
-    puts
-
-    messages << "quit"
-    messages << "firmed"
-    messages << "draw-tree"
-    messages << "draw-dot"
-    Readline.completion_proc = Proc.new do |a|
-      messages.select { |m| m.match(a.to_s) }
-    end
-    loop do
-      buf = Readline.readline(@@readline_prompt, true)
-      raise Quit unless buf
-      raise Quit if parse_command(buf, "quit", []) { 1 }
-      next if parse_command(buf, "firmed", []) do
-        if l == length
-          puts "## まだ何も確定していませんよ"
-        else
-          puts
-          puts "## 確定済みリスト"
-          puts
-          (length - 1).downto(l) do |i|
-            puts " %d. %s" % [length - i, self[i]]
-          end
-        end
-        true
-      end
-      next if parse_command(buf, "dump-array", []) do
-        self.each_with_index do |x, i|
-          puts "%d. %s" % [i, x]
-        end
-        true
-      end
-      next if parse_command(buf, "draw-tree", ["-d", "-f"]) do |m, h|
-        n = -1
-        p h
-        if h.key?(:f)
-          n = h[:f].to_i - 1
-        end
-        d = -1
-        if h.key?(:d)
-          d = h[:d].to_i - 1
-        end
-        ll = l
-        if 0 <= d
-          ll = 0.upto(d).inject(0) do |i, j|
-            i + factor ** j
-          end
-        end
-        if ll > l
-          ll = l
-        end
-        if 0 <= n && n < ss.size
-          draw_tree(factor, ss[n], ll)
-        else
-          draw_tree(factor, 0, ll)
-        end
-        true
-      end
-      next if parse_command(buf, "draw-dot", ["-d", "-f"]) do |fa, h|
+      select_proc = Proc.new do |x|
+        nx = x[0]
+        range = (1..selections.size)
         begin
-          out = $stdout
-          if ! fa.empty?
-            if File.exists?(fa[0])
-              break true unless yesno("Overwrite \"#{fa[0]}\"?")
-            end
-            out = File.open(fa[0], "w")
-          end
-          n = -1
-          if h.key?(:f)
-            n = h[:f].to_i - 1
-          end
-          d = -1
-          if h.key?(:d)
-            d = h[:d].to_i - 1
-          end
-          ll = l
-          if 0 <= d
-            ll = 0.upto(d).inject(0) do |i, j|
-              i + factor ** j
-            end
-          end
-          if ll > l
-            ll = l
-          end
-          if 0 <= n && n < ss.size
-            draw_dot(out, factor, ss[n], ll)
-          else
-            draw_dot(out, factor, 0, ll)
-          end          
-        rescue SystemCallError => e
-          puts "Error: #{e.to_s}"
+          raise ArgumentError unless nx
+          n = nx.to_i
+          raise ArgumentError unless range.include?(n)
+          @select = selections[n - 1]
+        rescue ArgumentError
+          puts "Invalid number selected. Must be #{range}"
+          raise
         end
-        true
       end
-      buf.sub!(/^\s*(\d*)\D.*$/, "\\1")
-      nbuf = buf.to_i - 1
-      if nbuf >= 0 && nbuf < ss.size
-        ans = ss[nbuf]
-        if @heap_sort_state
-          @heap_sort_state["answers"] ||= Array.new
-          @heap_sort_state["answers"] << ans
+
+      thor_class.class_eval do
+        # override basename.
+        def self.basename
+          ""
         end
-        break ans
+      end
+
+      if ss > 0 &&
+         !thor_class.commands.key?("select") &&
+         !thor_class.instance_methods.any? { |x| x == :select }
+        thor_class.class_eval do
+          @@select_proc = select_proc
+
+          desc "select NUMBER...", "Select the option. Number should be #{1..selections.size}"
+          def select(*number)
+            begin
+              @@select_proc.call(number)
+            rescue ArgumentError
+              help("select")
+            end
+          end
+        end
+      end
+
+      if ss > 0
+        n = (Math.log(selections.size) / Math.log(10.0)).to_i + 1
+      else
+        n = 0
+      end
+      output.print "\n%s\n\n" % prompt
+      messages = selections.each_with_index.map do |x, i|
+        "%*d. %s" % [n > 3 ? n : 3, i + 1, x]
+      end
+      if ss > 0
+        messages.map! do |m|
+          output.print "%s\n" % m unless hide
+          m.sub(/^\s*/, "")
+        end
+        output.print "\n" unless hide
+      end
+
+      # TODO: complete subcommands and flags
+      if thor_class.superclass != Thor
+        thor_class.superclass.commands.each_pair do |k, v|
+          messages << v.usage.slice(/^\s*(\S+)/)
+        end
+      end
+      thor_class.commands.each_pair do |k, v|
+        messages << v.usage.slice(/^\s*(\S+)/)
+      end
+      messages << 'help'
+      Readline.completion_proc = Proc.new do |a|
+        messages.select { |m| m.match(a.to_s) }
+      end
+      loop do
+        if selections.any? { |x| x == @select }
+          begin
+            break @select
+          ensure
+            @select = nil
+          end
+        end
+        ret = Readline.readline(@@readline_prompt, true)
+        raise EOFError unless ret
+        # TODO: process escapes and quotes.
+        argv = ret.split(/ +/)
+        argv.delete("")
+        argv.compact!
+        begin
+          if argv[0] =~ /^\s*\d+/
+            select_proc.call(argv)
+            next
+          end
+        rescue ArgumentError
+          next
+        end
+        thor_class.start(argv)
       end
     end
   end
+end
+
+if $0 == __FILE__ then
+  include InteractiveSort
+
+  class TestClass < Thor
+    desc "quit", "Quit the program."
+    def quit
+      puts "Exitting..."
+      exit 0
+    end
+  end
+
+  a = []
+  a.extend Question
+  p Question.ask("## Choose prefer", ["a", "b", "c"], thor: TestClass)
+  p Question.ask("## Choose prefer", ["a", "b", "c"], thor: TestClass)
+
+  class SpecialCommands < Thor
+    @@list = []
+
+    desc "add STRING", "Add to list"
+    def add(string)
+      @@list << string
+    end
+
+    desc "remove STRING", "Remove from list"
+    def remove(string)
+      @@list.delete(string)
+    end
+
+    desc "list", "List contents"
+    def list()
+      @@list.each do |l|
+        puts " * #{l}"
+      end
+    end
+
+    desc "quit", "Quit the program"
+    def quit
+      puts "Exitting"
+      exit 0
+    end
+  end
+  p Question.ask("## Choose prefer", [], thor: SpecialCommands)
 end
