@@ -10,7 +10,7 @@
 
 を実行し、
 
-    ruby bin/interactive-sort
+    ruby exe/interactive-sort
 
 で起動するのをお勧めします。
 
