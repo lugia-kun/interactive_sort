@@ -48,7 +48,7 @@ module InteractiveSort
     rescue Question::Quit
       InteractiveSort::save_heap_state(prompt, init, list)
       exit 0
-    rescue RuntimeError => e
+    rescue SystemCallError, RuntimeError => e
       $stderr.puts "#{File.basename($0)}: error: #{e.to_s}"
       exit 1
     end
@@ -59,9 +59,11 @@ module InteractiveSort
     end
 
     no_commands do
-      def list_loader(list)
+      def list_loader(list_file)
         File.open(list_file, "r") do |fp|
-          data = fp.readlines
+          data = fp.readlines.map do |x|
+            x.chomp
+          end
           if data[0] =~ /^---/
             list = YAML.load(data.join("\n"))
             if !list.is_a?(Array)
