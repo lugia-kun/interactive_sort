@@ -11,6 +11,44 @@ require 'interactive_sort/question'
 
 module InteractiveSort
   module PokemonList
+    class PokemonData < Struct.new(:name, :mega, :primordial, :gender, :forme)
+      def to_s
+        g = ""
+        if self.gender
+          if self.gender == :female
+            g << "♀"
+          elsif self.gender == :male
+            g << "♂"
+          else
+            g << "?"
+          end
+        end
+        m = []
+        if self.mega
+          t = "メガシンカ"
+          if self.mega != true
+            t << self.mega
+          end
+          m << t
+        end
+        if self.primordial
+          t = "ゲンシカイキ"
+          if self.primordial != true
+            t << self.primordial
+          end
+          m << t
+        end
+        if self.forme
+          m << self.forme.to_s
+        end
+        if m.empty?
+          "%s%s" % [self.name.to_s, g]
+        else
+          "%s%s (%s)" % [self.name.to_s, g, m.join(", ")]
+        end
+      end
+    end
+
     class Error < RuntimeError
       def to_s
         @what
@@ -72,11 +110,30 @@ module InteractiveSort
     def self.build_gender_diff_list(old_list, opt)
       old_list ||= Array.new
       builder_base(opt) do |d, v| 
-        if d[:gender_diff]
-          f = old_list.find_index(d[:name])
-          old_list.delete(d[:name])
-          old_list.insert(f, d[:name] + "♀")
-          old_list.insert(f, d[:name] + "♂")
+        if d[:gender_diff].respond_to?(:include?)
+          old_list.map! do |m|
+            next m unless m.name == d[:name]
+
+            if m.forme
+              next m unless d[:gender_diff].include?(m.forme)
+            end
+
+            n = m.dup
+            m.gender = :male
+            n.gender = :female
+            [m, n]
+          end.flatten!
+
+        elsif d[:gender_diff]
+          old_list.map! do |m|
+            next m unless m.name == d[:name]
+
+            n = m.dup
+            m.gender = :male
+            n.gender = :female
+            [m, n]
+          end.flatten!
+
         elsif v
           $stderr.puts "#{File.basename($0)}: warning: Pokémon" +
                        " #{d[:name]} does not have gender difference."
@@ -86,36 +143,52 @@ module InteractiveSort
 
     def self.build_mega_list(old_list, opt)
       old_list ||= Array.new
+      proc = Proc.new do |data, key, assign|
+        if data[key].respond_to?(:map)
+          old_list.map! do |m|
+            next m unless m.name == data[:name]
+
+            t = m.dup
+            t.forme = nil
+            t.gender = nil
+            t.mega = nil
+            t.primordial = nil
+
+            [
+              m,
+              data[key].map do |type|
+                tt = t.dup
+                tm = tt.method(assign)
+                tm.call(type)
+                tt
+              end
+            ]
+          end.flatten!
+          true
+        elsif data[key]
+          old_list.map! do |m|
+            next m unless m.name == data[:name]
+
+            t = m.dup
+            t.forme = nil
+            t.gender = nil
+            t.mega = nil
+            t.primordial = nil
+
+            tm = t.method(assign)
+            tm.call(true)
+
+            [m, t]
+          end.flatten!
+          true
+        else
+          false
+        end
+      end
       builder_base(opt) do |d, v|
-        txt = []
-        if d[:mega]
-          if d[:mega].respond_to?(:each)
-            d[:mega].each do |type|
-              txt << "メガシンカ#{type}"
-            end
-          else
-            txt << "メガシンカ"
-          end
-        end
-        if d[:primordial]
-          txt << "ゲンシカイキ"
-        end
-        if !txt.empty?
-          fo = old_list.find_index(d[:name] + "♂")
-          fe = old_list.find_index(d[:name] + "♀")
-          fo ||= -1
-          fe ||= -1
-          fo = (fo > fe ? fo : fe)
-          if fo > 0
-            f = fo + 1
-          else
-            f = old_list.find_index(d[:name])
-            f += 1 if f >= 0
-          end
-          txt.reverse_each do |t| 
-            old_list.insert(f, d[:name] + " (#{t})")
-          end
-        elsif v
+        has_mega = proc.call(d, :mega, :"mega=")
+        has_prim = proc.call(d, :primordial, :"primordial=")
+        unless has_mega || has_prim
           $stderr.puts "#{File.basename($0)}: warning: Pokémon" +
                        " #{d[:name]} can not Mega Evolve or Primal Reverse."
         end
@@ -126,14 +199,34 @@ module InteractiveSort
       old_list ||= Array.new
       builder_base(opt) do |d, v|
         if d[:forme]
-          if d[:gender_diff]
-            fail NotImplementedError, "Currently, Pokemons which has gender differences does not have forme differences in the games. But not if we include anime variances. Please fix."
-          end
-          f = old_list.find_index(d[:name])
-          old_list.delete(d[:name])
-          d[:forme].reverse_each do |t|
-            old_list.insert(f, d[:name] + " (#{t})")
-          end
+          forme_with_gender_diff = d[:forme] &
+                                   if d[:gender_diff]
+                                     d[:gender_diff]
+                                   else
+                                     []
+                                   end
+          rem = d[:forme] - forme_with_gender_diff
+
+          old_list.map! do |m|
+            next m unless m.name == d[:name]
+            next m if m.mega
+            next m if m.primordial
+
+            o = m.dup
+            o.gender = nil
+
+            a = forme_with_gender_diff.map do |t|
+              tt = m.dup
+              tt.forme = t
+              tt
+            end
+            b = rem.map do |t|
+              tt = o.dup
+              tt.forme = t
+              tt
+            end
+            [a, b]
+          end.flatten!
         elsif v
           $stderr.puts "#{File.basename($0)}: warning: Pokémon" +
                        " #{d[:name]} does not have forme variations."
@@ -162,6 +255,9 @@ module InteractiveSort
         end
         list.delete(x)
       end
+      list.map! do |t|
+        PokemonData.new(t)
+      end
       
       if gd
         build_gender_diff_list(list, gd)
@@ -174,7 +270,77 @@ module InteractiveSort
       if fm
         build_forme_list(list, fm)
       end
-      list
+
+      mega_comp = lambda do |x, y|
+        xcom = x.respond_to?(:<=>)
+        ycom = y.respond_to?(:<=>)
+        if xcom && ycom
+          x <=> y
+        elsif xcom
+          -1
+        elsif ycom
+          1
+        else
+          0
+        end
+      end
+
+      list.sort! do |x, y|
+        next 0 if x == y
+
+        ix = NAMES[x.name]
+        iy = NAMES[y.name]
+        next ix <=> iy if ix != iy
+
+        if x.gender && y.gender
+          if x.gender == y.gender
+            next 0
+          end
+          case x.gender
+          when :male # y.gender == :female assumed.
+            next -1
+          when :female
+            next 1
+          end
+        end
+
+        xm = x.mega || x.primordial
+        ym = y.mega || y.primordial
+
+        unless x.forme || y.forme
+          next -1 if x.gender && ym
+          next  1 if y.gender && xm
+
+          next  1 if xm and !ym
+          next -1 if ym and !xm
+        end
+
+        xm = xm && x.forme.nil?
+        ym = ym && y.forme.nil?
+        next  1 if xm and !ym
+        next -1 if ym and !xm
+
+        if x.mega && y.mega
+          next mega_comp.call(x.mega, y.mega)
+        end
+        if x.primordial && y.primordial
+          next mega_com.call(x.primordial, y.primordial)
+        end
+
+        if x.forme && y.forme
+          d = POKEMON_DATA[ix]
+          ixf = d[:forme].index(x.forme)
+          iyf = d[:forme].index(y.forme)
+          next ixf <=> iyf if ixf && iyf
+          next  1 if ixf
+          next -1 if iyf
+          next  0
+        end
+
+        fail "Convparing #{x} and #{y}"
+      end
+
+      list.uniq
     end
 
     class InteractiveCommands < Thor

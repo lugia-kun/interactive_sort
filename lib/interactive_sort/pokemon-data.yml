@@ -33,7 +33,8 @@
 - name: アーボ
 - name: アーボック
 - name: ピカチュウ
-  gender_diff: yes
+  gender_diff: [ノーマル]
+  forme: [ノーマル, おきがえ, ハードロック, マダム, アイドル, ドクター, マスクド]
 - name: ライチュウ
   gender_diff: yes
 - name: サンド
@@ -208,6 +209,7 @@
 - name: チョンチー
 - name: ランターン
 - name: ピチュー
+  forme: [ノーマル, ギザみみ]
 - name: ピィ
 - name: ププリン
 - name: トゲピー
@@ -804,7 +806,7 @@
 - name: キュレム
   forme: [ノーマル, ブラック, ホワイト]
 - name: ケルディオ
-  forme: [ノーマル, かくご]
+  forme: [いつもの, かくご]
 - name: メロエッタ
   forme: [ボイス, ステップ]
 - name: ゲノセクト
