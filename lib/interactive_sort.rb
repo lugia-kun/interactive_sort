@@ -13,10 +13,18 @@ module InteractiveSort
     class_option :"list-file", :type => :string,
        :desc => "List to be sorted"
 
+    option :"max-selections", :type => :numeric,
+           :desc => "Maximum number of selections in each question. It must be > 3."
     option :prompt, :type => :string,
            :desc => "Ask for..."
     desc "heapsort", "Do heapsort"
     def heapsort()
+      n = nil
+      if options[:"max-selections"]
+        n = options[:"max-selections"].to_i
+        fail "--max-selections must be greater then or equal to 3." if n < 3
+      end
+
       list = []
       list_file = options[:"list-file"]
       if list_file
@@ -40,6 +48,8 @@ module InteractiveSort
       init = list.dup
 
       list.extend HeapSort
+      list.heap_factor = n - 1
+                                                                 
       list.heap_sort!(prompt)
 
       list.reverse!
@@ -93,6 +103,7 @@ module InteractiveSort
         begin
           list = init.dup
           list.extend HeapSort
+          list.heap_factor = data["factor"]
           list.answers = data["answers"]
           prompt = data["prompt"]
           prompt ||= "## 一番好きなのを選んでください"
@@ -136,6 +147,7 @@ module InteractiveSort
     if Question.yesno?("Save state?")
       data = {
         "mode" => "heapsort",
+        "factor" => list.heap_factor,
         "init" => init,
         "answers" => list.answers,
         "prompt" => prompt
