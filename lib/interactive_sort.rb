@@ -48,7 +48,7 @@ module InteractiveSort
       init = list.dup
 
       list.extend HeapSort
-      list.heap_factor = n - 1
+      list.heap_factor = n - 1 if n
                                                                  
       list.heap_sort!(prompt)
 

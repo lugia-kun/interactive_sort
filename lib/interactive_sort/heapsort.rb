@@ -85,11 +85,11 @@ module InteractiveSort
         end
 
         depth = options[:depth]
-        depth ||= @@list.size
+        depth ||= @@list.heap_last
 
         last = 1.upto(depth).inject(0) do |i, x|
           r = i + fac ** x
-          break @@list.size if r > @@list.size
+          break @@list.heap_last if r > @@list.heap_last
           r
         end
 
@@ -131,10 +131,10 @@ module InteractiveSort
         end
 
         depth = options[:depth]
-        depth ||= @@list.size
+        depth ||= @@list.heap_last
         last = 1.upto(depth).inject(0) do |i, x|
           r = i + fac ** x
-          break @@list.size if r > @@list.size
+          break @@list.heap_last if r > @@list.heap_last
           r
         end
 
