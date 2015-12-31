@@ -543,6 +543,7 @@
   gender_diff: yes
 - name: チェリンボ
 - name: チェリム
+  forme: [ネガ, ポジ]
 - name: カラナクシ
   forme: [にし, ひがし]
 - name: トリトドン
