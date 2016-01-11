@@ -444,6 +444,7 @@
 - name: ミロカロス
   gender_diff: yes
 - name: ポワルン
+  forme: [ノーマル, たいよう, あまみず, ゆきぐも]
 - name: カクレオン
 - name: カゲボウズ
 - name: ジュペッタ
